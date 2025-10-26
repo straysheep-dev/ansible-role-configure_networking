@@ -1,0 +1,163 @@
+---
+# configure_networking/tasks/linux.yml
+
+# If you're building an Ubuntu desktop environment on top of a server image,
+# you'll need to change networking to be handled by NetworkManager.
+# - https://github.com/canonical/autoinstall-desktop/blob/4fafe4935501a70e59a54f5138ced14512c5684f/autoinstall.yaml#L57
+
+# Some options will not work reliably for devices matched by name only and
+# rendered by networkd, due to interactions with device renaming in udev.
+# - https://netplan.readthedocs.io/en/latest/netplan-yaml/#properties-for-physical-device-types
+# - https://netplan.readthedocs.io/en/latest/netplan-yaml/#properties-for-all-device-types
+
+# systemd-networkd tasks
+- name: Create a new netplan file matching any ethernet card
+  ansible.builtin.copy:
+    dest: /etc/netplan/01-network-config-all.yaml
+    owner: root
+    group: root
+    mode: '0640'
+    content: |
+      network:
+        version: 2
+        renderer: networkd
+        ethernets:
+          any-eth:
+            match:
+              name: "e*"
+            dhcp4: true
+            dhcp6: true
+            optional: true
+  when: network_renderer == 'networkd'
+  become: true
+  become_method: ansible.builtin.sudo
+
+- name: Disable NetworkManager on next boot
+  ansible.builtin.service:
+    name: NetworkManager.service
+    enabled: false
+  when: (network_renderer == 'networkd') and
+        ('NetworkManager.service' in ansible_facts.services) and
+        ('network-manager' in ansible_facts.packages)
+  become: true
+  become_method: ansible.builtin.sudo
+
+# NetworkManager tasks
+- name: Create new netplan files for NetworkManager
+  ansible.builtin.copy:
+    dest: /etc/netplan/01-network-config-all.yaml
+    owner: root
+    group: root
+    mode: '0640'
+    content: |
+      network:
+        version: 2
+        renderer: NetworkManager
+  when: network_renderer == 'NetworkManager'
+  become: true
+  become_method: ansible.builtin.sudo
+
+- name: Disable systemd-networkd on next boot
+  ansible.builtin.service:
+    name: systemd-networkd.service
+    enabled: false
+  when: (network_renderer == 'NetworkManager') and
+        ('systemd-networkd.service' in ansible_facts.services)
+  become: true
+  become_method: ansible.builtin.sudo
+
+- name: Disable systemd-networkd-wait-online on next boot
+  ansible.builtin.service:
+    name: systemd-networkd-wait-online
+    enabled: false
+  when: (network_renderer == 'NetworkManager') and
+        ('systemd-networkd-wait-online.service' in ansible_facts.services)
+  become: true
+  become_method: ansible.builtin.sudo
+
+# Cleanup default cloud-init configuration now that we've written our own
+- name: Remove cloud-init netplan files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  with_fileglob:
+    - "/etc/netplan/00-installer-config*.yaml"
+  become: true
+  become_method: ansible.builtin.sudo
+
+# Hostname and host file tasks
+- name: "Set hostname"
+  ansible.builtin.copy:
+    dest: /etc/hostname
+    owner: root
+    group: root
+    mode: '0644'
+    content: "{{ hostname_string }}"
+  become: true
+  become_method: ansible.builtin.sudo
+  tags:
+    - molecule-notest
+
+- name: "Get stats of /etc/hosts"
+  ansible.builtin.stat:
+    path: /etc/hosts
+  register: etc_hosts
+
+- name: "Create /etc/hosts"
+  ansible.builtin.copy:
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      127.0.0.1 localhost
+      127.0.1.1 {{ hostname_string }}
+
+      # The following lines are desirable for IPv6 capable hosts
+      ::1     ip6-localhost ip6-loopback
+      fe00::0 ip6-localnet
+      ff00::0 ip6-mcastprefix
+      ff02::1 ip6-allnodes
+      ff02::2 ip6-allrouters
+  when: (not etc_hosts.stat.exists) or
+        (etc_hosts.stat.exists and etc_hosts.stat.size == 0)
+  become: true
+  become_method: ansible.builtin.sudo
+  tags:
+    - molecule-notest
+
+- name: "Configure /etc/hosts"
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    search_string: '127.0.1.1'
+    line: 127.0.1.1 {{ hostname_string }}
+    owner: root
+    group: root
+    mode: '0644'
+  when: etc_hosts.stat.exists and etc_hosts.stat.size > 0
+  become: true
+  become_method: ansible.builtin.sudo
+  tags:
+    - molecule-notest
+
+# Firewall Tasks
+# This section should be moved to its own Ansible role in the future
+# For now it simply enables UFW with SSH allowed, for a minimal firewall
+# config to complete a headless build with basic hardening.
+- name: Allow SSH (Firewall)
+  ansible.builtin.command: ufw allow ssh
+  when: ('ufw.service' in ansible_facts.services) and
+        ('ufw' in ansible_facts.packages)
+  become: true
+  become_method: ansible.builtin.sudo
+
+- name: Enable UFW (Firewall)
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo y | ufw enable
+  args:
+    executable: /bin/bash
+  when: ('ufw.service' in ansible_facts.services) and
+        ('ufw' in ansible_facts.packages)
+  become: true
+  become_method: ansible.builtin.sudo

@@ -1,3 +1,13 @@
 # SPDX-License-Identifier: MIT
 ---
-# tasks file for role_name
+# tasks file for configure_networking
+
+- name: "Gather Service Facts"
+  ansible.builtin.service_facts:
+
+- name: "Gather Package Facts"
+  ansible.builtin.package_facts:
+
+- name: "Include Linux Tasks"
+  include_tasks: linux.yml
+  when: ansible_facts.system == "Linux"

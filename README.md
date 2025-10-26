@@ -1,9 +1,9 @@
-role_name
+configure_networking
 =========
 
-![molecule workflow](https://github.com/straysheep-dev/ansible-role-template/actions/workflows/molecule.yml/badge.svg) ![ansible-lint workflow](https://github.com/straysheep-dev/ansible-role-template/actions/workflows/ansible-lint.yml/badge.svg)
+![molecule workflow](https://github.com/straysheep-dev/ansible-role-configure_networking/actions/workflows/molecule.yml/badge.svg) ![ansible-lint workflow](https://github.com/straysheep-dev/ansible-role-configure_networking/actions/workflows/ansible-lint.yml/badge.svg)
 
-A brief description of the role goes here.
+Manage the files, services, and settings of common network components.
 
 > [!NOTE]
 > 1. To initialize submodules in this template, do: `git submodule update --init --recursive`
@@ -17,17 +17,22 @@ A brief description of the role goes here.
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+**OS**
+
+For now, only Debian and Ubuntu are supported in molecule testing. This role defaults to using netplan to configure networkd, though you can change the `network_renderer` under [defaults/main.yml](./defaults/main.yml) to be `NetworkManager`. Over time support will be expanded.
 
 Role Variables
 --------------
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+All modifiable variables are under [defaults/main.yml](./defaults/main.yml).
+
+- `hostname_string: "devops"`: Set the hostname
+- `network_renderer: "networkd"`: Use 'networkd' for servers, and 'NetworkManager' for desktops
 
 Dependencies
 ------------
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+None.
 
 Example Playbook
 ----------------
@@ -38,8 +43,11 @@ Including an example of how to use your role (for instance, with variables passe
 - name: "Default Playbook"
   hosts: all
     #some_group
+  vars:
+    hostname_string: "ubuntu-server"
+    network_renderer: "networkd"
   roles:
-    - role: straysheep_dev.role_name
+    - role: straysheep_dev.configure_networking
 ```
 
 
